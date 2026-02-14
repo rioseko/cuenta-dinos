@@ -77,6 +77,12 @@ export default function App() {
     setIsReading(false)
   }, [generatedStory])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }, [currentStep])
+
   const step0CtaRef = useRef(null)
   const step1CtaRef = useRef(null)
   const step2CtaRef = useRef(null)
