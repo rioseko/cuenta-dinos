@@ -74,6 +74,12 @@ export default function App() {
       } catch {}
       audioRef.current.audio = null
     }
+    if (audioRef.current?.url) {
+      try {
+        URL.revokeObjectURL(audioRef.current.url)
+      } catch {}
+      audioRef.current.url = null
+    }
     setIsReading(false)
   }, [generatedStory])
 
@@ -142,13 +148,19 @@ export default function App() {
 
   const toggleRead = () => {
     if (!generatedStory) return
-    if (!audioRef.current) audioRef.current = { audio: null }
+    if (!audioRef.current) audioRef.current = { audio: null, url: null }
     if (isReading) {
       if (audioRef.current.audio) {
         try {
           audioRef.current.audio.pause()
           audioRef.current.audio.currentTime = 0
         } catch {}
+      }
+      if (audioRef.current.url) {
+        try {
+          URL.revokeObjectURL(audioRef.current.url)
+        } catch {}
+        audioRef.current.url = null
       }
       if (window.speechSynthesis) {
         try {
@@ -170,18 +182,42 @@ export default function App() {
           throw new Error('tts-fail')
         }
         const json = await res.json()
-        const src = json?.audioUrl
-          ? json.audioUrl
-          : json?.audioBase64
-          ? `data:${json?.mime || 'audio/mpeg'};base64,${json.audioBase64}`
-          : null
+        let src = null
+        let blobUrl = null
+        if (json?.audioBase64) {
+          const b64 = json.audioBase64
+          const mimeType = json?.mime || 'audio/mpeg'
+          const byteString = atob(b64)
+          const ab = new ArrayBuffer(byteString.length)
+          const ia = new Uint8Array(ab)
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i)
+          const blob = new Blob([ia], { type: mimeType })
+          blobUrl = URL.createObjectURL(blob)
+          src = blobUrl
+        } else if (json?.audioUrl) {
+          src = json.audioUrl
+        }
         if (!src) throw new Error('no-audio')
-        const audio = new Audio(src)
+        const audio = new Audio()
+        audio.setAttribute('playsinline', 'true')
+        audio.src = src
+        audio.load()
         audio.onended = () => setIsReading(false)
         audioRef.current.audio = audio
+        if (audioRef.current.url) {
+          try {
+            URL.revokeObjectURL(audioRef.current.url)
+          } catch {}
+        }
+        audioRef.current.url = blobUrl
         setIsTtsLoading(false)
         setIsReading(true)
-        await audio.play()
+        try {
+          await audio.play()
+        } catch {
+          setIsReading(false)
+          throw new Error('play-rejected')
+        }
       } catch (e) {
         setIsTtsLoading(false)
         if (!window.speechSynthesis) return
