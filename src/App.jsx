@@ -335,8 +335,10 @@ export default function App() {
                   <button
                     disabled={!canContinueStep0}
                     onClick={goNext}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
-                      canContinueStep0 ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white font-semibold transition-transform flex items-center justify-center gap-2 shadow-md ${
+                      canContinueStep0
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg hover:scale-[1.02]'
+                        : 'bg-emerald-300 cursor-not-allowed'
                     }`}
                   >
                     <Sparkles className="w-5 h-5" />
@@ -373,8 +375,10 @@ export default function App() {
                   <button
                     disabled={!canContinueStep1}
                     onClick={goNext}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
-                      canContinueStep1 ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white font-semibold transition-transform flex items-center justify-center gap-2 shadow-md ${
+                      canContinueStep1
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg hover:scale-[1.02]'
+                        : 'bg-emerald-300 cursor-not-allowed'
                     }`}
                   >
                     <Sparkles className="w-5 h-5" />
@@ -382,7 +386,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={goBack}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl text-emerald-800 font-semibold transition-transform bg-gradient-to-r from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 border border-emerald-200 shadow-sm"
                   >
                     Atrás
                   </button>
@@ -416,8 +420,10 @@ export default function App() {
                   <button
                     disabled={!canCreate}
                     onClick={createStory}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
-                      canCreate ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white font-semibold transition-transform flex items-center justify-center gap-2 shadow-md ${
+                      canCreate
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg hover:scale-[1.02]'
+                        : 'bg-emerald-300 cursor-not-allowed'
                     }`}
                   >
                     <Sparkles className="w-5 h-5" />
@@ -425,7 +431,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={goBack}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl text-emerald-800 font-semibold transition-transform bg-gradient-to-r from-emerald-50 to-emerald-100 hover:from-emerald-100 hover:to-emerald-200 border border-emerald-200 shadow-sm"
                   >
                     Atrás
                   </button>
@@ -450,8 +456,10 @@ export default function App() {
                 <div className="mb-4 flex justify-center">
                   <button
                     onClick={toggleRead}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
-                      isReading ? 'bg-rose-500 hover:bg-rose-600' : 'bg-cyan-500 hover:bg-cyan-600'
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white font-semibold transition-transform flex items-center justify-center gap-2 shadow-md ${
+                      isReading
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 hover:shadow-lg'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg'
                     } hover:scale-[1.02]`}
                   >
                     <Volume2 className="w-5 h-5" />
@@ -470,7 +478,7 @@ export default function App() {
                 <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-3 justify-center">
                   <button
                     onClick={resetAll}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-600 transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl text-white font-semibold transition-transform hover:scale-[1.02] flex items-center justify-center gap-2 shadow-md bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 hover:shadow-lg"
                   >
                     <Sparkles className="w-5 h-5" />
                     Crear Otro Cuento
