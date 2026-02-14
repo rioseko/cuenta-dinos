@@ -250,6 +250,53 @@ export default function App() {
     ;(async () => {
       try {
         setIsTtsLoading(true)
+        const playChunksWebAudio = async () => {
+          try {
+            const parts = generatedStory
+              .split(/(?<=\.)\s+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+            const Ctx = window.AudioContext || window.webkitAudioContext
+            const ctx = audioCtxRef.current || new Ctx()
+            audioCtxRef.current = ctx
+            await ctx.resume()
+            for (let i = 0; i < parts.length; i++) {
+              if (!isReading && i > 0) break
+              const rBin = await fetch('/.netlify/functions/generate-audio?format=binary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: parts[i] })
+              })
+              if (!rBin.ok) {
+                let t = ''
+                try {
+                  t = await rBin.text()
+                } catch {}
+                reportError('Chunk TTS HTTP error', `status ${rBin.status} ${rBin.statusText}\n${t?.slice(0, 400)}`)
+                throw new Error('chunk-fail')
+              }
+              const arr = await rBin.arrayBuffer()
+              const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
+              const srcNode = ctx.createBufferSource()
+              srcNode.buffer = buf
+              srcNode.connect(ctx.destination)
+              await new Promise((resolve) => {
+                srcNode.onended = resolve
+                audioSrcRef.current = srcNode
+                if (!isReading && i === 0) {
+                  resolve()
+                } else {
+                  srcNode.start(0)
+                }
+              })
+            }
+            setIsTtsLoading(false)
+            return true
+          } catch (e) {
+            reportError('Reproducción por párrafos falló', e)
+            return false
+          }
+        }
         const res = await fetch('/.netlify/functions/generate-audio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -261,6 +308,9 @@ export default function App() {
             bodySnippet = await res.text()
           } catch {}
           reportError('TTS HTTP error', `status ${res.status} ${res.statusText}\n${bodySnippet?.slice(0, 400)}`)
+          setIsReading(true)
+          const ok = await playChunksWebAudio()
+          if (ok) return
           throw new Error('tts-fail')
         }
         const json = await res.json()
@@ -297,41 +347,12 @@ export default function App() {
         try {
           await el.play()
         } catch {
-          reportError('Audio element play() rechazado, intento WebAudio fallback')
-          try {
-            const rBin = await fetch('/.netlify/functions/generate-audio?format=binary', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ text: generatedStory })
-            })
-            if (!rBin.ok) throw new Error('bin-fetch-fail')
-            const arr = await rBin.arrayBuffer()
-            const Ctx = window.AudioContext || window.webkitAudioContext
-            const ctx = audioCtxRef.current || new Ctx()
-            audioCtxRef.current = ctx
-            await ctx.resume()
-            const buf = await new Promise((res, rej) => {
-              ctx.decodeAudioData(arr, res, rej)
-            })
-            const srcNode = ctx.createBufferSource()
-            srcNode.buffer = buf
-            srcNode.connect(ctx.destination)
-            srcNode.onended = () => setIsReading(false)
-            if (audioSrcRef.current) {
-              try {
-                audioSrcRef.current.stop(0)
-              } catch {}
-            }
-            audioSrcRef.current = srcNode
-            setIsReading(true)
-            srcNode.start(0)
-            setIsTtsLoading(false)
-            return
-          } catch {
-            reportError('WebAudio fallback falló', e2)
-            setIsReading(false)
-            throw new Error('play-rejected')
-          }
+          reportError('Audio element play() rechazado, intento reproducción por párrafos')
+          setIsReading(true)
+          const ok = await playChunksWebAudio()
+          if (ok) return
+          setIsReading(false)
+          throw new Error('play-rejected')
         }
       } catch (e) {
         setIsTtsLoading(false)
