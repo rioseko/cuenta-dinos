@@ -23,6 +23,19 @@ const STYLES = [
   { key: 'educational', emoji: '📚', title: 'Educativo y Didáctico', desc: 'Datos divertidos y conocimiento' }
 ]
 
+const LESSONS = [
+  { emoji: '😊', text: 'Ser amable con los demás' },
+  { emoji: '🤝', text: 'Compartir es importante' },
+  { emoji: '💪', text: 'Ser valiente cuando tengo miedo' },
+  { emoji: '🎨', text: 'Probar cosas nuevas' },
+  { emoji: '❤️', text: 'Decir la verdad' },
+  { emoji: '🧠', text: 'Escuchar con atención' },
+  { emoji: '🧹', text: 'Ordenar mis juguetes' },
+  { emoji: '🌈', text: 'Respetar a todos' },
+  { emoji: '🦕', text: 'Pedir ayuda cuando la necesito' },
+  { emoji: '⭐', text: 'No rendirme aunque sea difícil' }
+]
+
 export default function App() {
   const [formData, setFormData] = useState({ dinosaur: '', style: '', lesson: '' })
   const [currentStep, setCurrentStep] = useState(0)
@@ -66,6 +79,7 @@ export default function App() {
 
   const step0CtaRef = useRef(null)
   const step1CtaRef = useRef(null)
+  const step2CtaRef = useRef(null)
 
   const handleSelectDino = (name) => {
     setFormData((s) => ({ ...s, dinosaur: name }))
@@ -83,6 +97,13 @@ export default function App() {
 
   const handleLesson = (e) => {
     setFormData((s) => ({ ...s, lesson: e.target.value }))
+  }
+
+  const handleSelectLesson = (text) => {
+    setFormData((s) => ({ ...s, lesson: text }))
+    if (step2CtaRef.current) {
+      step2CtaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 
   const goNext = () => {
@@ -328,13 +349,26 @@ export default function App() {
             {currentStep === 2 && (
               <div>
                 <h1 className="text-xl md:text-2xl font-bold text-emerald-800 mb-4">¿Qué lección quieres enseñar?</h1>
-                <textarea
-                  value={formData.lesson}
-                  onChange={handleLesson}
-                  placeholder="Ejemplos: Ser amable con los demás, probar cosas nuevas, compartir es importante, ser valiente cuando tenemos miedo..."
-                  className="w-full h-40 md:h-36 p-4 rounded-2xl border border-emerald-200 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-                />
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between">
+                <div className="space-y-3">
+                  {LESSONS.map((l) => {
+                    const selected = formData.lesson === l.text
+                    return (
+                      <button
+                        key={l.text}
+                        onClick={() => handleSelectLesson(l.text)}
+                        className={`w-full flex items-center gap-3 p-4 rounded-2xl border transition-all ${
+                          selected ? 'border-emerald-500 bg-green-50' : 'border-emerald-100 hover:border-emerald-300'
+                        }`}
+                      >
+                        <span className="text-xl">{l.emoji}</span>
+                        <div className="text-left">
+                          <div className="font-semibold text-emerald-800">{l.text}</div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between" ref={step2CtaRef}>
                   <button
                     onClick={goBack}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
