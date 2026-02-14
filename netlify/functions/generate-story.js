@@ -29,17 +29,17 @@ El cuento debe:
 Por favor escribe solo el contenido del cuento, sin título ni formato adicional.`
 
     const apiKey = process.env.CLARIFAI_API_KEY
-    const modelId = process.env.CLARIFAI_MODEL_ID || 'gpt-oss-120b'
-    const modelVersionId = process.env.CLARIFAI_MODEL_VERSION_ID || (modelId === 'gpt-oss-120b' ? 'f1d2ad8c01c74705868f5c8ae4a1ff7c' : undefined)
-    const userId = process.env.CLARIFAI_USER_ID || (modelId === 'gpt-oss-120b' ? 'openai' : undefined)
-    const appId = process.env.CLARIFAI_APP_ID || (modelId === 'gpt-oss-120b' ? 'chat-completion' : undefined)
+    const modelId = process.env.CLARIFAI_MODEL_ID
+    const modelVersionId = process.env.CLARIFAI_MODEL_VERSION_ID
+    const userId = process.env.CLARIFAI_USER_ID
+    const appId = process.env.CLARIFAI_APP_ID
     if (!apiKey) {
       console.error('Función: CLARIFAI_API_KEY ausente')
       return { statusCode: 500, body: JSON.stringify({ error: 'Falta CLARIFAI_API_KEY' }) }
     }
-    if (!userId || !appId) {
-      console.error('Función: faltan CLARIFAI_USER_ID o CLARIFAI_APP_ID')
-      return { statusCode: 500, body: JSON.stringify({ error: 'Falta CLARIFAI_USER_ID o CLARIFAI_APP_ID' }) }
+    if (!userId || !appId || !modelId || !modelVersionId) {
+      console.error('Función: faltan identificadores de Clarifai (usuario/app/modelo/versión)')
+      return { statusCode: 500, body: JSON.stringify({ error: 'Faltan CLARIFAI_USER_ID, CLARIFAI_APP_ID, CLARIFAI_MODEL_ID o CLARIFAI_MODEL_VERSION_ID' }) }
     }
 
     const base = `https://api.clarifai.com/v2/users/${encodeURIComponent(userId)}/apps/${encodeURIComponent(appId)}/models/${encodeURIComponent(modelId)}`
