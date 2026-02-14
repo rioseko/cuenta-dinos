@@ -43,6 +43,7 @@ export default function App() {
   const [generatedStory, setGeneratedStory] = useState('')
   const [isReading, setIsReading] = useState(false)
   const [isTtsLoading, setIsTtsLoading] = useState(false)
+  const [showAudioControls, setShowAudioControls] = useState(false)
   const totalSteps = 5
 
   const canContinueStep0 = formData.dinosaur !== ''
@@ -89,9 +90,17 @@ export default function App() {
     }
   }, [currentStep])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      setShowAudioControls(params.has('audioDebug'))
+    }
+  }, [])
+
   const step0CtaRef = useRef(null)
   const step1CtaRef = useRef(null)
   const step2CtaRef = useRef(null)
+  const audioElRef = useRef(null)
 
   const handleSelectDino = (name) => {
     setFormData((s) => ({ ...s, dinosaur: name }))
@@ -198,12 +207,12 @@ export default function App() {
           src = json.audioUrl
         }
         if (!src) throw new Error('no-audio')
-        const audio = new Audio()
-        audio.setAttribute('playsinline', 'true')
-        audio.src = src
-        audio.load()
-        audio.onended = () => setIsReading(false)
-        audioRef.current.audio = audio
+        const el = audioElRef.current || new Audio()
+        el.setAttribute('playsinline', 'true')
+        el.src = src
+        el.load()
+        el.onended = () => setIsReading(false)
+        audioRef.current.audio = el
         if (audioRef.current.url) {
           try {
             URL.revokeObjectURL(audioRef.current.url)
@@ -213,7 +222,7 @@ export default function App() {
         setIsTtsLoading(false)
         setIsReading(true)
         try {
-          await audio.play()
+          await el.play()
         } catch {
           setIsReading(false)
           throw new Error('play-rejected')
@@ -466,6 +475,7 @@ export default function App() {
                     {isReading ? 'Detener lectura' : 'Leer cuento en voz alta'}
                   </button>
                 </div>
+                <audio ref={audioElRef} playsInline className={showAudioControls ? 'w-full mt-2' : 'hidden'} controls={showAudioControls} />
                 <div className="rounded-2xl p-5 md:p-6 bg-yellow-50 text-gray-800 leading-8 md:leading-8 text-base md:text-lg font-serif border-l-4 border-orange-300">
                   {paragraphs.length > 0
                     ? paragraphs.map((p, i) => (
