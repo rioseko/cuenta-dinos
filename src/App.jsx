@@ -3,16 +3,16 @@ import { Volume2, Sparkles } from 'lucide-react'
 import headerImg from './public/header.png'
 
 const DINOSAURS = [
-  'Tyrannosaurus rex',
-  'Triceratops',
-  'Velociraptor',
-  'Spinosaurus',
-  'Giganotosaurus',
-  'Stegosaurus',
-  'Ankylosaurus',
-  'Carnotaurus',
   'Allosaurus',
-  'Argentinosaurus'
+  'Ankylosaurus',
+  'Argentinosaurus',
+  'Carnotaurus',
+  'Giganotosaurus',
+  'Spinosaurus',
+  'Stegosaurus',
+  'Triceratops',
+  'Tyrannosaurus rex',
+  'Velociraptor',
 ]
 
 const STYLES = [
