@@ -283,11 +283,7 @@ export default function App() {
               await new Promise((resolve) => {
                 srcNode.onended = resolve
                 audioSrcRef.current = srcNode
-                if (!isReading && i === 0) {
-                  resolve()
-                } else {
-                  srcNode.start(0)
-                }
+                srcNode.start(0)
               })
             }
             setIsTtsLoading(false)

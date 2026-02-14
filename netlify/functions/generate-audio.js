@@ -70,7 +70,7 @@ export const handler = async (event) => {
     } else {
       return {
         statusCode: 200,
-        body: JSON.stringify({ audioBase64, audioUrl, mime: 'audio/mpeg' })
+        body: JSON.stringify({ audioUrl, mime: 'audio/mpeg' })
       }
     }
   } catch (e) {
