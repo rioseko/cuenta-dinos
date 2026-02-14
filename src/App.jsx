@@ -325,7 +325,12 @@ export default function App() {
         } else if (json?.audioUrl) {
           src = json.audioUrl
         }
-        if (!src) throw new Error('no-audio')
+        if (!src) {
+          setIsReading(true)
+          const ok = await playChunksWebAudio()
+          if (ok) return
+          throw new Error('no-audio')
+        }
         const el = audioElRef.current || new Audio()
         el.setAttribute('playsinline', 'true')
         el.src = src

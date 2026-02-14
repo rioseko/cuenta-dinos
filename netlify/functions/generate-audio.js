@@ -68,9 +68,14 @@ export const handler = async (event) => {
         isBase64Encoded: true
       }
     } else {
+      const MAX_BASE64_LEN = 5500000
+      let bodyObj = { audioUrl, mime: 'audio/mpeg' }
+      if (!audioUrl && audioBase64 && audioBase64.length <= MAX_BASE64_LEN) {
+        bodyObj = { audioBase64, mime: 'audio/mpeg' }
+      }
       return {
         statusCode: 200,
-        body: JSON.stringify({ audioUrl, mime: 'audio/mpeg' })
+        body: JSON.stringify(bodyObj)
       }
     }
   } catch (e) {
