@@ -21,7 +21,7 @@ El cuento debe:
 - Enseñar la lección: ${lesson}
 - Ser apropiado para la hora de dormir (final calmante)
 - Ser entretenido pero no demasiado estimulante
-- Tener alrededor de 300-500 palabras
+- Tener alrededor de 200-300 palabras
 - Incluir una moraleja sutil tejida naturalmente en la narrativa
 - Estar completamente en español
 - El dinosaurio debe ser el protagonista principal

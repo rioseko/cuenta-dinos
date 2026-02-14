@@ -15,6 +15,7 @@ export const handler = async (event) => {
     const appId = 'audio-generation'
     const modelId = 'speech-synthesis'
     const versionId = 'f2cead3a965f4c419a61a4a9b501095c'
+    const wantsBinary = (event.queryStringParameters?.format || '').toLowerCase() === 'binary'
     const url = `https://api.clarifai.com/v2/users/${userId}/apps/${appId}/models/${modelId}/versions/${versionId}/outputs`
     const res = await fetch(url, {
       method: 'POST',
@@ -48,12 +49,31 @@ export const handler = async (event) => {
     if (!audioBase64 && !audioUrl) {
       return { statusCode: 502, body: JSON.stringify({ error: 'Audio no disponible' }) }
     }
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ audioBase64, audioUrl, mime: 'audio/mpeg' })
+    if (wantsBinary) {
+      let base64 = audioBase64
+      let mime = 'audio/mpeg'
+      if (!base64 && audioUrl) {
+        const r2 = await fetch(audioUrl)
+        const buf = await r2.arrayBuffer()
+        mime = r2.headers.get('content-type') || mime
+        base64 = Buffer.from(buf).toString('base64')
+      }
+      if (!base64) {
+        return { statusCode: 502, body: JSON.stringify({ error: 'Audio binario no disponible' }) }
+      }
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': mime },
+        body: base64,
+        isBase64Encoded: true
+      }
+    } else {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ audioBase64, audioUrl, mime: 'audio/mpeg' })
+      }
     }
   } catch (e) {
     return { statusCode: 500, body: JSON.stringify({ error: 'Error al generar audio' }) }
   }
 }
-

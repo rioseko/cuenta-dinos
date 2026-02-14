@@ -44,6 +44,7 @@ export default function App() {
   const [isReading, setIsReading] = useState(false)
   const [isTtsLoading, setIsTtsLoading] = useState(false)
   const [showAudioControls, setShowAudioControls] = useState(false)
+  const [audioLogs, setAudioLogs] = useState([])
   const totalSteps = 5
 
   const canContinueStep0 = formData.dinosaur !== ''
@@ -93,7 +94,9 @@ export default function App() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      setShowAudioControls(params.has('audioDebug'))
+      const ua = navigator.userAgent || ''
+      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      setShowAudioControls(params.has('audioDebug') || isIOS)
     }
   }, [])
 
@@ -101,6 +104,54 @@ export default function App() {
   const step1CtaRef = useRef(null)
   const step2CtaRef = useRef(null)
   const audioElRef = useRef(null)
+  const audioCtxRef = useRef(null)
+  const audioSrcRef = useRef(null)
+
+  const addAudioLog = (msg) => {
+    setAudioLogs((l) => [...l, `${new Date().toLocaleTimeString()} ${msg}`].slice(-60))
+  }
+
+  const reportError = (title, err) => {
+    const msg = typeof err === 'string' ? err : err?.message || ''
+    addAudioLog(`ERR ${title}: ${msg}`)
+    if (showAudioControls && typeof window !== 'undefined') {
+      try {
+        alert(`${title}${msg ? `\n${msg}` : ''}`)
+      } catch {}
+    }
+  }
+
+  useEffect(() => {
+    const el = audioElRef.current
+    if (!el) return
+    const onLm = () => addAudioLog('loadedmetadata')
+    const onCp = () => addAudioLog('canplay')
+    const onCpt = () => addAudioLog('canplaythrough')
+    const onPl = () => addAudioLog('play')
+    const onPa = () => addAudioLog('pause')
+    const onEn = () => addAudioLog('ended')
+    const onEr = () => {
+      addAudioLog('error')
+      const code = el?.error?.code ? ` code ${el.error.code}` : ''
+      reportError('Elemento <audio> error' + code)
+    }
+    el.addEventListener('loadedmetadata', onLm)
+    el.addEventListener('canplay', onCp)
+    el.addEventListener('canplaythrough', onCpt)
+    el.addEventListener('play', onPl)
+    el.addEventListener('pause', onPa)
+    el.addEventListener('ended', onEn)
+    el.addEventListener('error', onEr)
+    return () => {
+      el.removeEventListener('loadedmetadata', onLm)
+      el.removeEventListener('canplay', onCp)
+      el.removeEventListener('canplaythrough', onCpt)
+      el.removeEventListener('play', onPl)
+      el.removeEventListener('pause', onPa)
+      el.removeEventListener('ended', onEn)
+      el.removeEventListener('error', onEr)
+    }
+  }, [currentStep, showAudioControls])
 
   const handleSelectDino = (name) => {
     setFormData((s) => ({ ...s, dinosaur: name }))
@@ -147,6 +198,23 @@ export default function App() {
       } catch {}
       audioRef.current.audio = null
     }
+    if (audioRef.current?.url) {
+      try {
+        URL.revokeObjectURL(audioRef.current.url)
+      } catch {}
+      audioRef.current.url = null
+    }
+    if (audioSrcRef.current) {
+      try {
+        audioSrcRef.current.stop(0)
+      } catch {}
+      audioSrcRef.current = null
+    }
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.suspend()
+      } catch {}
+    }
     setIsReading(false)
     setIsTtsLoading(false)
     setGeneratedStory('')
@@ -188,6 +256,11 @@ export default function App() {
           body: JSON.stringify({ text: generatedStory })
         })
         if (!res.ok) {
+          let bodySnippet = ''
+          try {
+            bodySnippet = await res.text()
+          } catch {}
+          reportError('TTS HTTP error', `status ${res.status} ${res.statusText}\n${bodySnippet?.slice(0, 400)}`)
           throw new Error('tts-fail')
         }
         const json = await res.json()
@@ -224,11 +297,45 @@ export default function App() {
         try {
           await el.play()
         } catch {
-          setIsReading(false)
-          throw new Error('play-rejected')
+          reportError('Audio element play() rechazado, intento WebAudio fallback')
+          try {
+            const rBin = await fetch('/.netlify/functions/generate-audio?format=binary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: generatedStory })
+            })
+            if (!rBin.ok) throw new Error('bin-fetch-fail')
+            const arr = await rBin.arrayBuffer()
+            const Ctx = window.AudioContext || window.webkitAudioContext
+            const ctx = audioCtxRef.current || new Ctx()
+            audioCtxRef.current = ctx
+            await ctx.resume()
+            const buf = await new Promise((res, rej) => {
+              ctx.decodeAudioData(arr, res, rej)
+            })
+            const srcNode = ctx.createBufferSource()
+            srcNode.buffer = buf
+            srcNode.connect(ctx.destination)
+            srcNode.onended = () => setIsReading(false)
+            if (audioSrcRef.current) {
+              try {
+                audioSrcRef.current.stop(0)
+              } catch {}
+            }
+            audioSrcRef.current = srcNode
+            setIsReading(true)
+            srcNode.start(0)
+            setIsTtsLoading(false)
+            return
+          } catch {
+            reportError('WebAudio fallback falló', e2)
+            setIsReading(false)
+            throw new Error('play-rejected')
+          }
         }
       } catch (e) {
         setIsTtsLoading(false)
+        reportError('Fallo general TTS, uso SpeechSynthesis', e)
         if (!window.speechSynthesis) return
         const utter = new SpeechSynthesisUtterance(generatedStory)
         utter.lang = 'es-ES'
@@ -476,6 +583,12 @@ export default function App() {
                   </button>
                 </div>
                 <audio ref={audioElRef} playsInline className={showAudioControls ? 'w-full mt-2' : 'hidden'} controls={showAudioControls} />
+                {showAudioControls && (
+                  <div className="mt-2 p-3 bg-emerald-50 rounded-xl text-emerald-800 text-xs">
+                    <div className="font-semibold mb-1">Eventos de audio</div>
+                    <pre className="whitespace-pre-wrap max-h-40 overflow-auto">{audioLogs.join('\n')}</pre>
+                  </div>
+                )}
                 <div className="rounded-2xl p-5 md:p-6 bg-yellow-50 text-gray-800 leading-8 md:leading-8 text-base md:text-lg font-serif border-l-4 border-orange-300">
                   {paragraphs.length > 0
                     ? paragraphs.map((p, i) => (
