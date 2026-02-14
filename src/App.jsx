@@ -411,6 +411,17 @@ export default function App() {
                 <div className="rounded-2xl p-5 md:p-6 bg-gradient-to-r from-emerald-200 via-green-200 to-teal-200 text-emerald-900 font-bold text-lg md:text-xl mb-4">
                   Tu cuento está listo
                 </div>
+                <div className="mb-4 flex justify-center">
+                  <button
+                    onClick={toggleRead}
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
+                      isReading ? 'bg-rose-500 hover:bg-rose-600' : 'bg-cyan-500 hover:bg-cyan-600'
+                    } hover:scale-[1.02]`}
+                  >
+                    <Volume2 className="w-5 h-5" />
+                    {isReading ? 'Detener lectura' : 'Leer cuento en voz alta'}
+                  </button>
+                </div>
                 <div className="rounded-2xl p-5 md:p-6 bg-yellow-50 text-gray-800 leading-8 md:leading-8 text-base md:text-lg font-serif border-l-4 border-orange-300">
                   {paragraphs.length > 0
                     ? paragraphs.map((p, i) => (
@@ -421,15 +432,6 @@ export default function App() {
                     : generatedStory}
                 </div>
                 <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-3 justify-center">
-                  <button
-                    onClick={toggleRead}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
-                      isReading ? 'bg-rose-500 hover:bg-rose-600' : 'bg-cyan-500 hover:bg-cyan-600'
-                    } hover:scale-[1.02]`}
-                  >
-                    <Volume2 className="w-5 h-5" />
-                    {isReading ? 'Detener lectura' : 'Leer cuento en voz alta'}
-                  </button>
                   <button
                     onClick={resetAll}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-600 transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
