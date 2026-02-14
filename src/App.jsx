@@ -64,12 +64,21 @@ export default function App() {
     setIsReading(false)
   }, [generatedStory])
 
+  const step0CtaRef = useRef(null)
+  const step1CtaRef = useRef(null)
+
   const handleSelectDino = (name) => {
     setFormData((s) => ({ ...s, dinosaur: name }))
+    if (step0CtaRef.current) {
+      step0CtaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 
   const handleSelectStyle = (key) => {
     setFormData((s) => ({ ...s, style: key }))
+    if (step1CtaRef.current) {
+      step1CtaRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   }
 
   const handleLesson = (e) => {
@@ -259,7 +268,7 @@ export default function App() {
                     )
                   })}
                 </div>
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 flex justify-end" ref={step0CtaRef}>
                   <button
                     disabled={!canContinueStep0}
                     onClick={goNext}
@@ -296,7 +305,7 @@ export default function App() {
                     )
                   })}
                 </div>
-                <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between">
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between" ref={step1CtaRef}>
                   <button
                     onClick={goBack}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
