@@ -299,10 +299,11 @@ export default function App() {
                   <button
                     disabled={!canContinueStep0}
                     onClick={goNext}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform ${
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
                       canContinueStep0 ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
                     }`}
                   >
+                    <Sparkles className="w-5 h-5" />
                     Continuar
                   </button>
                 </div>
@@ -334,19 +335,20 @@ export default function App() {
                 </div>
                 <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between" ref={step1CtaRef}>
                   <button
+                    disabled={!canContinueStep1}
+                    onClick={goNext}
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
+                      canContinueStep1 ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    Continuar
+                  </button>
+                  <button
                     onClick={goBack}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
                   >
                     Atrás
-                  </button>
-                  <button
-                    disabled={!canContinueStep1}
-                    onClick={goNext}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform ${
-                      canContinueStep1 ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
-                    }`}
-                  >
-                    Continuar
                   </button>
                 </div>
               </div>
@@ -376,19 +378,20 @@ export default function App() {
                 </div>
                 <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-between" ref={step2CtaRef}>
                   <button
+                    disabled={!canCreate}
+                    onClick={createStory}
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
+                      canCreate ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
+                    }`}
+                  >
+                    <Sparkles className="w-5 h-5" />
+                    Crear Cuento
+                  </button>
+                  <button
                     onClick={goBack}
                     className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-100 text-emerald-800 hover:bg-emerald-200 transition-transform"
                   >
                     Atrás
-                  </button>
-                  <button
-                    disabled={!canCreate}
-                    onClick={createStory}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform ${
-                      canCreate ? 'bg-emerald-500 hover:bg-emerald-600 hover:scale-[1.02]' : 'bg-emerald-300 cursor-not-allowed'
-                    }`}
-                  >
-                    Crear Cuento
                   </button>
                 </div>
               </div>
