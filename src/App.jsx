@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Volume2, Sparkles } from 'lucide-react'
+import headerImg from './public/header.png'
 
 const DINOSAURS = [
   'Tyrannosaurus rex',
@@ -27,6 +29,7 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedStory, setGeneratedStory] = useState('')
   const [isReading, setIsReading] = useState(false)
+  const [isTtsLoading, setIsTtsLoading] = useState(false)
   const totalSteps = 5
 
   const canContinueStep0 = formData.dinosaur !== ''
@@ -50,6 +53,13 @@ export default function App() {
   useEffect(() => {
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel()
+    }
+    if (audioRef.current?.audio) {
+      try {
+        audioRef.current.audio.pause()
+        audioRef.current.audio.currentTime = 0
+      } catch {}
+      audioRef.current.audio = null
     }
     setIsReading(false)
   }, [generatedStory])
@@ -75,9 +85,19 @@ export default function App() {
 
   const resetAll = () => {
     if (window.speechSynthesis) {
-      window.speechSynthesis.cancel()
+      try {
+        window.speechSynthesis.cancel()
+      } catch {}
+    }
+    if (audioRef.current?.audio) {
+      try {
+        audioRef.current.audio.pause()
+        audioRef.current.audio.currentTime = 0
+      } catch {}
+      audioRef.current.audio = null
     }
     setIsReading(false)
+    setIsTtsLoading(false)
     setGeneratedStory('')
     setIsGenerating(false)
     setFormData({ dinosaur: '', style: '', lesson: '' })
@@ -86,20 +106,69 @@ export default function App() {
 
   const toggleRead = () => {
     if (!generatedStory) return
-    if (!window.speechSynthesis) return
+    if (!audioRef.current) audioRef.current = { audio: null }
     if (isReading) {
-      window.speechSynthesis.cancel()
+      if (audioRef.current.audio) {
+        try {
+          audioRef.current.audio.pause()
+          audioRef.current.audio.currentTime = 0
+        } catch {}
+      }
+      if (window.speechSynthesis) {
+        try {
+          window.speechSynthesis.cancel()
+        } catch {}
+      }
       setIsReading(false)
       return
     }
-    const utter = new SpeechSynthesisUtterance(generatedStory)
-    utter.lang = 'es-ES'
-    utter.rate = 0.9
-    utter.pitch = 1.1
-    utter.onend = () => setIsReading(false)
-    setIsReading(true)
-    window.speechSynthesis.speak(utter)
+    ;(async () => {
+      try {
+        setIsTtsLoading(true)
+        const res = await fetch('/.netlify/functions/generate-audio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: generatedStory })
+        })
+        if (!res.ok) {
+          throw new Error('tts-fail')
+        }
+        const json = await res.json()
+        const src = json?.audioUrl
+          ? json.audioUrl
+          : json?.audioBase64
+          ? `data:${json?.mime || 'audio/mpeg'};base64,${json.audioBase64}`
+          : null
+        if (!src) throw new Error('no-audio')
+        const audio = new Audio(src)
+        audio.onended = () => setIsReading(false)
+        audioRef.current.audio = audio
+        setIsTtsLoading(false)
+        setIsReading(true)
+        await audio.play()
+      } catch (e) {
+        setIsTtsLoading(false)
+        if (!window.speechSynthesis) return
+        const utter = new SpeechSynthesisUtterance(generatedStory)
+        utter.lang = 'es-ES'
+        utter.rate = 0.9
+        utter.pitch = 1.1
+        utter.onend = () => setIsReading(false)
+        setIsReading(true)
+        window.speechSynthesis.speak(utter)
+      }
+    })()
   }
+
+  const audioRef = useRef(null)
+
+  const paragraphs = useMemo(() => {
+    if (!generatedStory) return []
+    return generatedStory
+      .split(/(?<=\.)\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }, [generatedStory])
 
   const createStory = async () => {
     setIsGenerating(true)
@@ -115,16 +184,24 @@ export default function App() {
         })
       })
       if (!res.ok) {
-        throw new Error('Fail')
+        let detail = ''
+        try {
+          const errJson = await res.json()
+          const part = errJson?.detail || errJson?.error || ''
+          detail = part ? `: ${part}` : ''
+        } catch (_) {}
+        throw new Error(`Función falló${detail}`)
       }
       const json = await res.json()
       const story = json?.story
       if (!story) {
-        throw new Error('Empty')
+        throw new Error('Respuesta vacía')
       }
       setGeneratedStory(story)
       setCurrentStep(4)
     } catch (e) {
+      // Diagnóstico en consola para entorno local
+      console.error('Error al generar el cuento:', e)
       const demo = `Había una vez un ${formData.dinosaur} que aprendió: ${formData.lesson}.`
       setGeneratedStory(demo)
       setCurrentStep(4)
@@ -138,6 +215,13 @@ export default function App() {
       <div className="w-full max-w-lg md:max-w-3xl">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
           <div className="p-5 md:p-8">
+            <div className="mb-4 md:mb-6 flex justify-center">
+              <img
+                src={headerImg}
+                alt="Lucas abrazando un dinosaurio de peluche"
+                className="h-56 md:h-64 object-contain"
+              />
+            </div>
             {currentStep <= 2 && (
               <div className="mb-6">
                 <div className="flex items-center justify-between text-sm text-emerald-700 font-medium">
@@ -275,22 +359,30 @@ export default function App() {
                 <div className="rounded-2xl p-5 md:p-6 bg-gradient-to-r from-emerald-200 via-green-200 to-teal-200 text-emerald-900 font-bold text-lg md:text-xl mb-4">
                   Tu cuento está listo
                 </div>
-                <div className="rounded-2xl p-5 md:p-6 bg-yellow-50 text-emerald-900 leading-relaxed text-base md:text-lg">
-                  {generatedStory}
+                <div className="rounded-2xl p-5 md:p-6 bg-yellow-50 text-gray-800 leading-8 md:leading-8 text-base md:text-lg font-serif border-l-4 border-orange-300">
+                  {paragraphs.length > 0
+                    ? paragraphs.map((p, i) => (
+                        <p key={i} className="mb-4 tracking-normal">
+                          {p}
+                        </p>
+                      ))
+                    : generatedStory}
                 </div>
-                <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-3">
+                <div className="mt-6 flex flex-col sm:flex-row flex-wrap gap-3 justify-center">
                   <button
                     onClick={toggleRead}
-                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform ${
+                    className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-white transition-transform flex items-center justify-center gap-2 ${
                       isReading ? 'bg-rose-500 hover:bg-rose-600' : 'bg-cyan-500 hover:bg-cyan-600'
                     } hover:scale-[1.02]`}
                   >
-                    {isReading ? 'Detener Lectura' : 'Leer Cuento en Voz Alta'}
+                    <Volume2 className="w-5 h-5" />
+                    {isReading ? 'Detener lectura' : 'Leer cuento en voz alta'}
                   </button>
                   <button
                     onClick={resetAll}
-                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-600 transition-transform hover:scale-[1.02]"
+                    className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-emerald-500 text-white hover:bg-emerald-600 transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
                   >
+                    <Sparkles className="w-5 h-5" />
                     Crear Otro Cuento
                   </button>
                 </div>
@@ -299,6 +391,16 @@ export default function App() {
           </div>
         </div>
       </div>
+      {isTtsLoading && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-2xl shadow-xl p-6 md:p-8 w-full max-w-sm text-center">
+            <div className="text-3xl mb-2">🔊</div>
+            <div className="text-emerald-800 font-semibold text-lg mb-1">Preparando la lectura</div>
+            <div className="text-emerald-700">Espera mientras afinamos la voz</div>
+            <div className="mx-auto mt-4 h-10 w-10 rounded-full border-4 border-emerald-200 border-t-emerald-500 animate-spin" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
