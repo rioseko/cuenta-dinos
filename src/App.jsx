@@ -111,9 +111,7 @@ export default function App() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      const ua = navigator.userAgent || ''
-      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-      setShowAudioControls(params.has('audioDebug') || isIOS)
+      setShowAudioControls(params.has('audioDebug'))
     }
   }, [])
 
@@ -341,6 +339,11 @@ export default function App() {
           }, 100)
         })
 
+        // Pequeña pausa de 0.5s entre párrafos si se sigue leyendo
+        if (readingRef.current) {
+          await new Promise((r) => setTimeout(r, 500))
+        }
+
         // Preparar siguiente
         currentBuffer = await nextBufferPromise
         nextBufferPromise = loadChunk(i + 2)
@@ -419,92 +422,10 @@ export default function App() {
         setIsTtsLoading(true)
         setIsReading(true) // Marcar true inmediatamente
 
-        // Intentar obtener audio completo primero
-        const res = await fetchWithTimeout(TTS_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: generatedStory })
-        }, 30000)
-
-        // Manejo especial 413: Payload Too Large -> Usar chunks silenciosamente
-        if (res.status === 413) {
-          console.log('Audio muy largo (413), usando reproducción por partes...')
-          const ok = await playChunksSequence(generatedStory)
-          if (!ok) throw new Error('Falló reproducción por partes tras 413')
-          return
-        }
-
-        if (!res.ok) {
-          let bodySnippet = ''
-          try { bodySnippet = await res.text() } catch {}
-          // Si es otro error, reportamos y probamos chunks
-          reportError('TTS HTTP error', `status ${res.status} ${res.statusText}\n${bodySnippet?.slice(0, 200)}`)
-          const ok = await playChunksSequence(generatedStory)
-          if (!ok) throw new Error('tts-fail')
-          return
-        }
-
-        const json = await res.json()
-        let src = null
-        let blobUrl = null
-
-        if (json?.audioBase64) {
-          const b64 = json.audioBase64
-          const mimeType = json?.mime || 'audio/mpeg'
-          const byteString = atob(b64)
-          const ab = new ArrayBuffer(byteString.length)
-          const ia = new Uint8Array(ab)
-          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i)
-          const blob = new Blob([ia], { type: mimeType })
-          blobUrl = URL.createObjectURL(blob)
-          src = blobUrl
-        } else if (json?.audioUrl) {
-          src = json.audioUrl
-        }
-
-        if (!src) {
-          // Si no hay src, probamos chunks
-          console.warn('No audio src returned, trying chunks')
-          const ok = await playChunksSequence(generatedStory)
-          if (ok) return
-          throw new Error('no-audio')
-        }
-
-        // Reproducir audio único (HTML5 Audio)
-        const el = audioElRef.current || new Audio()
-        el.setAttribute('playsinline', 'true') // Importante iOS
-        el.src = src
-        el.load()
-        
-        el.onended = () => {
-          setIsReading(false)
-          if (audioRef.current.url) {
-            try { URL.revokeObjectURL(audioRef.current.url) } catch {}
-            audioRef.current.url = null
-          }
-        }
-        
-        el.onerror = () => {
-           console.error('Audio element error', el.error)
-           setIsReading(false) // Fallback manual si falla carga
-        }
-
-        audioRef.current.audio = el
-        if (audioRef.current.url) {
-          try { URL.revokeObjectURL(audioRef.current.url) } catch {}
-        }
-        audioRef.current.url = blobUrl
-        
-        setIsTtsLoading(false)
-        
-        try {
-          await el.play()
-        } catch (playErr) {
-          console.warn('Play rejected, trying chunks fallback', playErr)
-          // Si falla play() (ej. permisos), intentamos chunks (Web Audio API suele ser más permisiva si se inició con click)
-          const ok = await playChunksSequence(generatedStory)
-          if (!ok) throw playErr
-        }
+        // MODIFICACIÓN: Saltar intento de audio completo (que suele dar 413) y usar chunks directamente
+        // Esto mejora la latencia percibida y evita errores de payload
+        const ok = await playChunksSequence(generatedStory)
+        if (!ok) throw new Error('Falló reproducción por partes')
 
       } catch (e) {
         console.error('Fallo general TTS', e)
