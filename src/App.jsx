@@ -283,6 +283,7 @@ export default function App() {
             audioCtxRef.current = ctx
             await ctx.resume()
             let firstStarted = false
+            const wait = (ms) => new Promise((r) => setTimeout(r, ms))
             for (let i = 0; i < parts.length; i++) {
               if (!readingRef.current && i > 0) break
               const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
@@ -300,18 +301,26 @@ export default function App() {
               }
               const arr = await rBin.arrayBuffer()
               const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
+              if (!buf || !buf.length && buf.duration === 0) {
+                continue
+              }
               const srcNode = ctx.createBufferSource()
               srcNode.buffer = buf
               srcNode.connect(ctx.destination)
-              await new Promise((resolve) => {
-                srcNode.onended = resolve
-                audioSrcRef.current = srcNode
-                if (!firstStarted) {
-                  setIsTtsLoading(false)
-                  firstStarted = true
-                }
-                srcNode.start(0)
-              })
+              await ctx.resume()
+              audioSrcRef.current = srcNode
+              if (!firstStarted) {
+                setIsTtsLoading(false)
+                firstStarted = true
+              }
+              srcNode.start(0)
+              const dur = Math.max(0.1, (buf.duration || 0) + 0.3)
+              await Promise.race([
+                new Promise((resolve) => {
+                  srcNode.onended = resolve
+                }),
+                wait(dur * 1000)
+              ])
             }
             setIsReading(false)
             setIsTtsLoading(false)
@@ -398,6 +407,7 @@ export default function App() {
             audioCtxRef.current = ctx
             await ctx.resume()
             let firstStarted = false
+            const wait = (ms) => new Promise((r) => setTimeout(r, ms))
             for (let i = 0; i < parts.length; i++) {
               if (!readingRef.current && i > 0) break
               const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
@@ -413,18 +423,26 @@ export default function App() {
               }
               const arr = await rBin.arrayBuffer()
               const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
+              if (!buf || !buf.length && buf.duration === 0) {
+                continue
+              }
               const srcNode = ctx.createBufferSource()
               srcNode.buffer = buf
               srcNode.connect(ctx.destination)
-              await new Promise((resolve) => {
-                srcNode.onended = resolve
-                audioSrcRef.current = srcNode
-                if (!firstStarted) {
-                  setIsTtsLoading(false)
-                  firstStarted = true
-                }
-                srcNode.start(0)
-              })
+              await ctx.resume()
+              audioSrcRef.current = srcNode
+              if (!firstStarted) {
+                setIsTtsLoading(false)
+                firstStarted = true
+              }
+              srcNode.start(0)
+              const dur = Math.max(0.1, (buf.duration || 0) + 0.3)
+              await Promise.race([
+                new Promise((resolve) => {
+                  srcNode.onended = resolve
+                }),
+                wait(dur * 1000)
+              ])
             }
             setIsReading(false)
             setIsTtsLoading(false)
