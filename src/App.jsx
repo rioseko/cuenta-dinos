@@ -47,6 +47,23 @@ export default function App() {
   const [audioLogs, setAudioLogs] = useState([])
   const totalSteps = 5
 
+  const API_BASE = (import.meta.env?.VITE_BACKEND_BASE_URL || '/.netlify/functions').replace(/\/$/, '')
+  const TTS_BASE = (import.meta.env?.VITE_TTS_BASE_URL || API_BASE).replace(/\/$/, '')
+  const USING_NETLIFY_FUNCS_TTS = TTS_BASE.endsWith('/.netlify/functions')
+  const STORY_ENDPOINT = '/.netlify/functions/generate-story'
+  const TTS_ENDPOINT = USING_NETLIFY_FUNCS_TTS ? `${TTS_BASE}/generate-audio` : `${TTS_BASE}/tts`
+  const TTS_BIN_ENDPOINT = `${TTS_ENDPOINT}?format=binary`
+
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+    const ac = new AbortController()
+    const id = setTimeout(() => ac.abort(), timeoutMs)
+    try {
+      return await fetch(url, { ...options, signal: ac.signal })
+    } finally {
+      clearTimeout(id)
+    }
+  }
+
   const canContinueStep0 = formData.dinosaur !== ''
   const canContinueStep1 = formData.style !== ''
   const canCreate = formData.lesson.trim() !== ''
@@ -260,9 +277,10 @@ export default function App() {
             const ctx = audioCtxRef.current || new Ctx()
             audioCtxRef.current = ctx
             await ctx.resume()
+            let firstStarted = false
             for (let i = 0; i < parts.length; i++) {
               if (!isReading && i > 0) break
-              const rBin = await fetch('/.netlify/functions/generate-audio?format=binary', {
+              const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text: parts[i] })
@@ -283,9 +301,14 @@ export default function App() {
               await new Promise((resolve) => {
                 srcNode.onended = resolve
                 audioSrcRef.current = srcNode
+                if (!firstStarted) {
+                  setIsTtsLoading(false)
+                  firstStarted = true
+                }
                 srcNode.start(0)
               })
             }
+            setIsReading(false)
             setIsTtsLoading(false)
             return true
           } catch (e) {
@@ -293,7 +316,7 @@ export default function App() {
             return false
           }
         }
-        const res = await fetch('/.netlify/functions/generate-audio', {
+        const res = await fetchWithTimeout(TTS_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: generatedStory })
@@ -384,7 +407,7 @@ export default function App() {
     setIsGenerating(true)
     setCurrentStep(3)
     try {
-      const res = await fetch('/.netlify/functions/generate-story', {
+      const res = await fetchWithTimeout(STORY_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
