@@ -54,7 +54,7 @@ export default function App() {
   const TTS_ENDPOINT = USING_NETLIFY_FUNCS_TTS ? `${TTS_BASE}/generate-audio` : `${TTS_BASE}/tts`
   const TTS_BIN_ENDPOINT = `${TTS_ENDPOINT}?format=binary`
 
-  const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
+  const fetchWithTimeout = async (url, options = {}, timeoutMs = 30000) => {
     const ac = new AbortController()
     const id = setTimeout(() => ac.abort(), timeoutMs)
     try {
@@ -245,9 +245,128 @@ export default function App() {
     setCurrentStep(0)
   }
 
+  const playChunksSequence = async (textToPlay) => {
+    try {
+      const parts = textToPlay
+        .split(/(?<=\.)\s+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+
+      if (parts.length === 0) return false
+
+      const Ctx = window.AudioContext || window.webkitAudioContext
+      const ctx = audioCtxRef.current || new Ctx()
+      audioCtxRef.current = ctx
+
+      // Intentar resume preventivo para iOS
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => {})
+      }
+
+      // Función helper para cargar un chunk
+      const loadChunk = async (index) => {
+        if (index >= parts.length) return null
+        try {
+          const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: parts[index] })
+          }, 30000)
+          
+          if (!rBin.ok) {
+            // Si falla un chunk, retornamos null pero no explotamos todo
+            console.warn(`Chunk ${index} failed: ${rBin.status}`)
+            return null
+          }
+          const arr = await rBin.arrayBuffer()
+          // Decode puede fallar si el audio es inválido
+          return await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
+        } catch (e) {
+          console.error(`Error loading chunk ${index}`, e)
+          return null
+        }
+      }
+
+      // Cargar el primer chunk
+      let currentBuffer = await loadChunk(0)
+      if (!currentBuffer) {
+        throw new Error('No se pudo cargar el primer fragmento de audio')
+      }
+
+      // Una vez tenemos el primero, quitamos el loading
+      setIsTtsLoading(false)
+
+      // Precargar el segundo
+      let nextBufferPromise = loadChunk(1)
+
+      for (let i = 0; i < parts.length; i++) {
+        if (!readingRef.current) break
+
+        // Si el buffer actual es nulo (falló carga), intentamos saltar al siguiente
+        if (!currentBuffer) {
+          currentBuffer = await nextBufferPromise
+          nextBufferPromise = loadChunk(i + 2)
+          if (!currentBuffer) continue
+        }
+
+        const srcNode = ctx.createBufferSource()
+        srcNode.buffer = currentBuffer
+        srcNode.connect(ctx.destination)
+
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {})
+
+        audioSrcRef.current = srcNode
+        srcNode.start(0)
+
+        // Esperar a que termine O que el usuario cancele
+        await new Promise((resolve) => {
+          let finished = false
+          const onEnd = () => {
+            if (!finished) {
+              finished = true
+              resolve()
+            }
+          }
+          srcNode.onended = onEnd
+          // Timeout de seguridad: duración + 1s
+          setTimeout(onEnd, (currentBuffer.duration * 1000) + 1000)
+          
+          // Check periódico de cancelación
+          const checkCancel = setInterval(() => {
+            if (!readingRef.current) {
+              try { srcNode.stop() } catch {}
+              clearInterval(checkCancel)
+              onEnd()
+            }
+          }, 100)
+        })
+
+        // Preparar siguiente
+        currentBuffer = await nextBufferPromise
+        nextBufferPromise = loadChunk(i + 2)
+      }
+
+      return true
+    } catch (e) {
+      console.error('Secuencia de chunks falló', e)
+      // Si falló antes de empezar, reportamos
+      if (isTtsLoading) {
+         reportError('Error reproduciendo audio por partes', e)
+      }
+      return false
+    } finally {
+      setIsReading(false)
+      setIsTtsLoading(false)
+    }
+  }
+
   const toggleRead = () => {
     if (!generatedStory) return
+    
+    // Reset previo
     if (!audioRef.current) audioRef.current = { audio: null, url: null }
+    
+    // Si ya está leyendo, detener
     if (isReading) {
       if (audioRef.current.audio) {
         try {
@@ -256,99 +375,79 @@ export default function App() {
         } catch {}
       }
       if (audioRef.current.url) {
-        try {
-          URL.revokeObjectURL(audioRef.current.url)
-        } catch {}
+        try { URL.revokeObjectURL(audioRef.current.url) } catch {}
         audioRef.current.url = null
       }
       if (window.speechSynthesis) {
-        try {
-          window.speechSynthesis.cancel()
-        } catch {}
+        try { window.speechSynthesis.cancel() } catch {}
+      }
+      if (audioSrcRef.current) {
+        try { audioSrcRef.current.stop() } catch {}
+        audioSrcRef.current = null
       }
       setIsReading(false)
       return
     }
+
+    // Iniciar lectura
     ;(async () => {
+      // PRE-WARM AUDIO CONTEXT (CRÍTICO PARA IOS)
+      // Inicializar y reanudar el contexto inmediatamente tras el click del usuario
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext
+        if (Ctx) {
+          const ctx = audioCtxRef.current || new Ctx()
+          audioCtxRef.current = ctx
+          if (ctx.state === 'suspended') {
+             // Intentar resume inmediatamente para aprovechar el gesto del usuario
+             ctx.resume().catch(() => {}) 
+          }
+          // Crear un oscilador silencioso breve para forzar la activación en algunos navegadores
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          gain.gain.value = 0.001 // Casi silencio
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.start(0)
+          osc.stop(0.1)
+        }
+      } catch (e) { 
+        console.error('AudioContext pre-warm failed', e) 
+      }
+
       try {
         setIsTtsLoading(true)
-        const playChunksWebAudio = async () => {
-          try {
-            const parts = generatedStory
-              .split(/(?<=\.)\s+/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-            const Ctx = window.AudioContext || window.webkitAudioContext
-            const ctx = audioCtxRef.current || new Ctx()
-            audioCtxRef.current = ctx
-            await ctx.resume()
-            let firstStarted = false
-            const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-            for (let i = 0; i < parts.length; i++) {
-              if (!readingRef.current && i > 0) break
-              const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: parts[i] })
-              })
-              if (!rBin.ok) {
-                let t = ''
-                try {
-                  t = await rBin.text()
-                } catch {}
-                reportError('Chunk TTS HTTP error', `status ${rBin.status} ${rBin.statusText}\n${t?.slice(0, 400)}`)
-                throw new Error('chunk-fail')
-              }
-              const arr = await rBin.arrayBuffer()
-              const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
-              if (!buf || !buf.length && buf.duration === 0) {
-                continue
-              }
-              const srcNode = ctx.createBufferSource()
-              srcNode.buffer = buf
-              srcNode.connect(ctx.destination)
-              await ctx.resume()
-              audioSrcRef.current = srcNode
-              if (!firstStarted) {
-                setIsTtsLoading(false)
-                firstStarted = true
-              }
-              srcNode.start(0)
-              const dur = Math.max(0.1, (buf.duration || 0) + 0.3)
-              await Promise.race([
-                new Promise((resolve) => {
-                  srcNode.onended = resolve
-                }),
-                wait(dur * 1000)
-              ])
-            }
-            setIsReading(false)
-            setIsTtsLoading(false)
-            return true
-          } catch (e) {
-            reportError('Reproducción por párrafos falló', e)
-            return false
-          }
-        }
+        setIsReading(true) // Marcar true inmediatamente
+
+        // Intentar obtener audio completo primero
         const res = await fetchWithTimeout(TTS_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: generatedStory })
         }, 30000)
+
+        // Manejo especial 413: Payload Too Large -> Usar chunks silenciosamente
+        if (res.status === 413) {
+          console.log('Audio muy largo (413), usando reproducción por partes...')
+          const ok = await playChunksSequence(generatedStory)
+          if (!ok) throw new Error('Falló reproducción por partes tras 413')
+          return
+        }
+
         if (!res.ok) {
           let bodySnippet = ''
-          try {
-            bodySnippet = await res.text()
-          } catch {}
-          reportError('TTS HTTP error', `status ${res.status} ${res.statusText}\n${bodySnippet?.slice(0, 400)}`)
-          setIsReading(true)
-          const ok = await playChunksWebAudio()
-          if (ok) return
-          throw new Error('tts-fail')
+          try { bodySnippet = await res.text() } catch {}
+          // Si es otro error, reportamos y probamos chunks
+          reportError('TTS HTTP error', `status ${res.status} ${res.statusText}\n${bodySnippet?.slice(0, 200)}`)
+          const ok = await playChunksSequence(generatedStory)
+          if (!ok) throw new Error('tts-fail')
+          return
         }
+
         const json = await res.json()
         let src = null
         let blobUrl = null
+
         if (json?.audioBase64) {
           const b64 = json.audioBase64
           const mimeType = json?.mime || 'audio/mpeg'
@@ -362,104 +461,67 @@ export default function App() {
         } else if (json?.audioUrl) {
           src = json.audioUrl
         }
+
         if (!src) {
-          setIsReading(true)
-          const ok = await playChunksWebAudio()
+          // Si no hay src, probamos chunks
+          console.warn('No audio src returned, trying chunks')
+          const ok = await playChunksSequence(generatedStory)
           if (ok) return
           throw new Error('no-audio')
         }
+
+        // Reproducir audio único (HTML5 Audio)
         const el = audioElRef.current || new Audio()
-        el.setAttribute('playsinline', 'true')
+        el.setAttribute('playsinline', 'true') // Importante iOS
         el.src = src
         el.load()
-        el.onended = () => setIsReading(false)
+        
+        el.onended = () => {
+          setIsReading(false)
+          if (audioRef.current.url) {
+            try { URL.revokeObjectURL(audioRef.current.url) } catch {}
+            audioRef.current.url = null
+          }
+        }
+        
+        el.onerror = () => {
+           console.error('Audio element error', el.error)
+           setIsReading(false) // Fallback manual si falla carga
+        }
+
         audioRef.current.audio = el
         if (audioRef.current.url) {
-          try {
-            URL.revokeObjectURL(audioRef.current.url)
-          } catch {}
+          try { URL.revokeObjectURL(audioRef.current.url) } catch {}
         }
         audioRef.current.url = blobUrl
+        
         setIsTtsLoading(false)
-        setIsReading(true)
+        
         try {
           await el.play()
-        } catch {
-          reportError('Audio element play() rechazado, intento reproducción por párrafos')
-          setIsReading(true)
-          const ok = await playChunksWebAudio()
-          if (ok) return
-          setIsReading(false)
-          throw new Error('play-rejected')
+        } catch (playErr) {
+          console.warn('Play rejected, trying chunks fallback', playErr)
+          // Si falla play() (ej. permisos), intentamos chunks (Web Audio API suele ser más permisiva si se inició con click)
+          const ok = await playChunksSequence(generatedStory)
+          if (!ok) throw playErr
         }
+
       } catch (e) {
+        console.error('Fallo general TTS', e)
         setIsTtsLoading(false)
-        reportError('Fallo general TTS, intento reproducción por párrafos', e)
-        try {
-          setIsReading(true)
-          const ok = await (async () => {
-            const parts = generatedStory
-              .split(/(?<=\.)\s+/)
-              .map((s) => s.trim())
-              .filter(Boolean)
-            const Ctx = window.AudioContext || window.webkitAudioContext
-            const ctx = audioCtxRef.current || new Ctx()
-            audioCtxRef.current = ctx
-            await ctx.resume()
-            let firstStarted = false
-            const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-            for (let i = 0; i < parts.length; i++) {
-              if (!readingRef.current && i > 0) break
-              const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: parts[i] })
-              }, 15000)
-              if (!rBin.ok) {
-                let t = ''
-                try { t = await rBin.text() } catch {}
-                reportError('Chunk TTS HTTP error', `status ${rBin.status} ${rBin.statusText}\n${t?.slice(0, 400)}`)
-                throw new Error('chunk-fail')
-              }
-              const arr = await rBin.arrayBuffer()
-              const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
-              if (!buf || !buf.length && buf.duration === 0) {
-                continue
-              }
-              const srcNode = ctx.createBufferSource()
-              srcNode.buffer = buf
-              srcNode.connect(ctx.destination)
-              await ctx.resume()
-              audioSrcRef.current = srcNode
-              if (!firstStarted) {
-                setIsTtsLoading(false)
-                firstStarted = true
-              }
-              srcNode.start(0)
-              const dur = Math.max(0.1, (buf.duration || 0) + 0.3)
-              await Promise.race([
-                new Promise((resolve) => {
-                  srcNode.onended = resolve
-                }),
-                wait(dur * 1000)
-              ])
-            }
-            setIsReading(false)
-            setIsTtsLoading(false)
-            return true
-          })()
-          if (ok) return
-        } catch (e2) {
-          reportError('Reproducción por párrafos falló', e2)
+        
+        // Último intento: SpeechSynthesis
+        if (window.speechSynthesis) {
+          reportError('Fallo TTS remoto, usando voz del sistema')
+          const utter = new SpeechSynthesisUtterance(generatedStory)
+          utter.lang = 'es-ES'
+          utter.rate = 0.9
+          utter.onend = () => setIsReading(false)
+          window.speechSynthesis.speak(utter)
+        } else {
+          setIsReading(false)
+          reportError('No se pudo reproducir audio', e)
         }
-        if (!window.speechSynthesis) return
-        const utter = new SpeechSynthesisUtterance(generatedStory)
-        utter.lang = 'es-ES'
-        utter.rate = 0.9
-        utter.pitch = 1.1
-        utter.onend = () => setIsReading(false)
-        setIsReading(true)
-        window.speechSynthesis.speak(utter)
       }
     })()
   }
