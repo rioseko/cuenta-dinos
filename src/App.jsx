@@ -123,6 +123,11 @@ export default function App() {
   const audioElRef = useRef(null)
   const audioCtxRef = useRef(null)
   const audioSrcRef = useRef(null)
+  const readingRef = useRef(false)
+
+  useEffect(() => {
+    readingRef.current = isReading
+  }, [isReading])
 
   const addAudioLog = (msg) => {
     setAudioLogs((l) => [...l, `${new Date().toLocaleTimeString()} ${msg}`].slice(-60))
@@ -279,7 +284,7 @@ export default function App() {
             await ctx.resume()
             let firstStarted = false
             for (let i = 0; i < parts.length; i++) {
-              if (!isReading && i > 0) break
+              if (!readingRef.current && i > 0) break
               const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -320,7 +325,7 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: generatedStory })
-        })
+        }, 30000)
         if (!res.ok) {
           let bodySnippet = ''
           try {
@@ -380,7 +385,55 @@ export default function App() {
         }
       } catch (e) {
         setIsTtsLoading(false)
-        reportError('Fallo general TTS, uso SpeechSynthesis', e)
+        reportError('Fallo general TTS, intento reproducción por párrafos', e)
+        try {
+          setIsReading(true)
+          const ok = await (async () => {
+            const parts = generatedStory
+              .split(/(?<=\.)\s+/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+            const Ctx = window.AudioContext || window.webkitAudioContext
+            const ctx = audioCtxRef.current || new Ctx()
+            audioCtxRef.current = ctx
+            await ctx.resume()
+            let firstStarted = false
+            for (let i = 0; i < parts.length; i++) {
+              if (!readingRef.current && i > 0) break
+              const rBin = await fetchWithTimeout(TTS_BIN_ENDPOINT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: parts[i] })
+              }, 15000)
+              if (!rBin.ok) {
+                let t = ''
+                try { t = await rBin.text() } catch {}
+                reportError('Chunk TTS HTTP error', `status ${rBin.status} ${rBin.statusText}\n${t?.slice(0, 400)}`)
+                throw new Error('chunk-fail')
+              }
+              const arr = await rBin.arrayBuffer()
+              const buf = await new Promise((res, rej) => ctx.decodeAudioData(arr, res, rej))
+              const srcNode = ctx.createBufferSource()
+              srcNode.buffer = buf
+              srcNode.connect(ctx.destination)
+              await new Promise((resolve) => {
+                srcNode.onended = resolve
+                audioSrcRef.current = srcNode
+                if (!firstStarted) {
+                  setIsTtsLoading(false)
+                  firstStarted = true
+                }
+                srcNode.start(0)
+              })
+            }
+            setIsReading(false)
+            setIsTtsLoading(false)
+            return true
+          })()
+          if (ok) return
+        } catch (e2) {
+          reportError('Reproducción por párrafos falló', e2)
+        }
         if (!window.speechSynthesis) return
         const utter = new SpeechSynthesisUtterance(generatedStory)
         utter.lang = 'es-ES'

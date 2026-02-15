@@ -69,14 +69,17 @@ export const handler = async (event) => {
       }
     } else {
       const MAX_BASE64_LEN = 5500000
-      let bodyObj = { audioUrl, mime: 'audio/mpeg' }
-      if (!audioUrl && audioBase64 && audioBase64.length <= MAX_BASE64_LEN) {
-        bodyObj = { audioBase64, mime: 'audio/mpeg' }
+      if (audioUrl) {
+        return { statusCode: 200, body: JSON.stringify({ audioUrl, mime: 'audio/mpeg' }) }
       }
-      return {
-        statusCode: 200,
-        body: JSON.stringify(bodyObj)
+      if (audioBase64) {
+        if (audioBase64.length <= MAX_BASE64_LEN) {
+          return { statusCode: 200, body: JSON.stringify({ audioBase64, mime: 'audio/mpeg' }) }
+        } else {
+          return { statusCode: 413, body: JSON.stringify({ error: 'Audio demasiado grande para JSON' }) }
+        }
       }
+      return { statusCode: 502, body: JSON.stringify({ error: 'Audio no disponible' }) }
     }
   } catch (e) {
     return { statusCode: 500, body: JSON.stringify({ error: 'Error al generar audio' }) }
